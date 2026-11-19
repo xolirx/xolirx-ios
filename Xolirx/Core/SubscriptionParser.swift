@@ -21,6 +21,13 @@ enum SubscriptionParser {
         return out
     }
 
+    /// Убирает пробелы вокруг названия: subscription часто отдаёт
+    /// «🇸🇪 Sweden  » с хвостовыми пробелами.
+    static func cleanTitle(_ raw: String, fallback: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
     /// Значение из JSON-словаря vmess: строка или число.
     static func stringValue(_ any: Any?) -> String {
         if let value = any as? String { return value }
@@ -61,7 +68,7 @@ enum SubscriptionParser {
 
     private static func parseStandard(_ link: String, proto: String, subscriptionID: UUID) -> VpnServer? {
         guard let parts = LinkParts(link: link) else { return nil }
-        let name = parts.name.isEmpty ? parts.host : parts.name
+        let name = cleanTitle(parts.name, fallback: parts.host)
         let country = CountryCatalog.code(for: name + " " + parts.host)
         return VpnServer(
             title: name,
@@ -100,7 +107,7 @@ enum SubscriptionParser {
         }
 
         guard credentials.contains(":"), let split = LinkParts.hostPort(hostPort) else { return nil }
-        let title = name.isEmpty ? split.host : name
+        let title = cleanTitle(name, fallback: split.host)
         return VpnServer(
             title: title,
             countryCode: CountryCatalog.code(for: title + " " + split.host),
@@ -124,7 +131,7 @@ enum SubscriptionParser {
         let port = intValue(obj["port"])
         guard !host.isEmpty, port > 0 else { return nil }
         let ps = stringValue(obj["ps"])
-        let title = ps.isEmpty ? host : ps
+        let title = cleanTitle(ps, fallback: host)
         return VpnServer(
             title: title,
             countryCode: CountryCatalog.code(for: title + " " + host),
@@ -172,7 +179,11 @@ struct LinkParts {
         port = split.port
     }
 
-    static func hostPort(_ s: String) -> (host: String, port: Int)? {
+    static func hostPort(_ raw: String) -> (host: String, port: Int)? {
+        var s = raw
+        // hysteria2-ссылки приходят как host:port/?sni=… — хвостовой слэш
+        // ломает Int(port), поэтому убираем его до разбора.
+        while s.hasSuffix("/") { s.removeLast() }
         if s.hasPrefix("["), let close = s.firstIndex(of: "]") {
             let host = String(s[s.index(after: s.startIndex)..<close])
             let after = s.index(after: close)

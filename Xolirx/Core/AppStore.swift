@@ -30,6 +30,8 @@ final class AppStore: ObservableObject {
     @Published var toast: String?
     @Published var addBusy = false
     @Published var addError: String?
+    @Published var clientHelp = false
+    @Published var helpText = ""
 
     private let defaults = UserDefaults.standard
     private let subsKey = "xolirx.subs.v2"
@@ -148,7 +150,9 @@ final class AppStore: ObservableObject {
         guard let url = URL(string: urlString) else { throw StoreError.badURL }
         var request = URLRequest(url: url)
         request.timeoutInterval = 20
-        request.setValue("v2rayN/7.14.1", forHTTPHeaderField: "User-Agent")
+        // Подписка отдаёт формат по User-Agent. С v2rayN она присылает Xray JSON,
+        // а с клиентским UA — обычный base64-список vless/hysteria2-ссылок.
+        request.setValue("sing-box/1.11.0 (iOS)", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -191,12 +195,16 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func refreshStale() async {
-        guard updateInterval > 0 else { return }
+    func refreshStale(force: Bool = false) async {
+        guard updateInterval > 0 || force else { return }
         let ttl = TimeInterval(updateInterval * 3600)
         for sub in subscriptions where !sub.url.isEmpty {
-            if Date().timeIntervalSince(sub.updatedAt) > ttl {
-                try? await loadRemote(urlString: sub.url, name: sub.name)
+            if force || Date().timeIntervalSince(sub.updatedAt) > ttl {
+                do {
+                    try await loadRemote(urlString: sub.url, name: sub.name)
+                } catch {
+                    if force { showToast(error.localizedDescription) }
+                }
             }
         }
     }
@@ -249,40 +257,58 @@ final class AppStore: ObservableObject {
     // MARK: - Клиенты и конфиг
 
     func copyConfig() {
-        guard let server = selectedServer,
-              let text = ConfigBuilder.json(for: server) else {
+        guard let server = selectedServer else {
             showToast("Сначала выберите сервер")
+            return
+        }
+        guard let text = ConfigBuilder.json(for: server) else {
+            UIPasteboard.general.string = server.link
+            showToast("XHTTP не поддержан sing-box — скопирована ссылка")
             return
         }
         UIPasteboard.general.string = text
         showToast("Конфиг sing-box скопирован")
     }
 
-    func openInClientOrCopy() {
-        guard let sub = activeSubscription, !sub.url.isEmpty else {
-            copyConfig()
+    func copyShareLink() {
+        guard let server = selectedServer else {
+            showToast("Сначала выберите сервер")
             return
         }
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        let encoded = sub.url.addingPercentEncoding(withAllowedCharacters: allowed) ?? sub.url
-        let base64 = Data(sub.url.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        let raw = [
-            "sing-box://import-remote-profile?url=\(encoded)",
-            "streisand://import/\(encoded)",
-            "sub://\(base64)"
-        ]
-        for item in raw {
-            if let url = URL(string: item), UIApplication.shared.canOpenURL(url) {
-                UIApplication.shared.open(url)
-                return
+        UIPasteboard.general.string = server.link
+        showToast("Ссылка на сервер скопирована")
+    }
+
+    func openInClientOrCopy() {
+        if let sub = activeSubscription, !sub.url.isEmpty {
+            var allowed = CharacterSet.alphanumerics
+            allowed.insert(charactersIn: "-._~")
+            let encoded = sub.url.addingPercentEncoding(withAllowedCharacters: allowed) ?? sub.url
+            let base64 = Data(sub.url.utf8).base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            let raw = [
+                "sing-box://import-remote-profile?url=\(encoded)",
+                "streisand://import/\(encoded)",
+                "shadowrocket://add/sub://\(base64)",
+                "sub://\(base64)"
+            ]
+            for item in raw {
+                if let url = URL(string: item), UIApplication.shared.canOpenURL(url) {
+                    UIApplication.shared.open(url)
+                    return
+                }
             }
+            UIPasteboard.general.string = sub.url
+            helpText = "Ссылка на подписку уже в буфере обмена. Установите VPN-клиент и вставьте её при добавлении профиля."
+            clientHelp = true
+            return
         }
-        copyConfig()
-        showToast("Клиент не установлен — конфиг скопирован")
+
+        UIPasteboard.general.string = selectedServer?.link ?? ""
+        helpText = "Ссылка на сервер уже в буфере обмена. Установите VPN-клиент и вставьте её при добавлении узла."
+        clientHelp = true
     }
 
     func copySubscriptionLink() {

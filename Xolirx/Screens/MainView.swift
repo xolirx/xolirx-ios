@@ -30,6 +30,11 @@ struct MainView: View {
             }
         }
         .overlay(alignment: .bottom) { toast(p) }
+        .alert("Нужен VPN-клиент", isPresented: $store.clientHelp) {
+            Button("Понятно", role: .cancel) { }
+        } message: {
+            Text(store.helpText + "\n\nБесплатные клиенты: sing-box, Streisand. Shadowrocket (платный) понимает XHTTP-узлы.")
+        }
         .sheet(item: $sheet) { item in
             Group {
                 switch item {
@@ -41,8 +46,15 @@ struct MainView: View {
             .environmentObject(store)
         }
         .task {
-            if store.servers.isEmpty { sheet = .add }
-            await store.refreshStale()
+            if store.subscriptions.isEmpty {
+                sheet = .add
+            } else if store.servers.isEmpty {
+                // Подписка уже добавлена, но узлы не разобрались (например,
+                // старый формат ответа) — перезагружаем сразу, не ждём TTL.
+                await store.refreshStale(force: true)
+            } else {
+                await store.refreshStale()
+            }
         }
     }
 
@@ -64,7 +76,7 @@ struct MainView: View {
                     .foregroundColor(p.dim)
             }
             Spacer()
-            Text("v2.1")
+            Text("v2.1.1")
                 .font(.system(size: 9, weight: .medium))
                 .tracking(1.2)
                 .foregroundColor(p.dim)
@@ -125,7 +137,9 @@ struct MainView: View {
     }
 
     private var statusLine: String {
-        if store.servers.isEmpty { return "добавьте подписку" }
+        if store.servers.isEmpty {
+            return store.subscriptions.isEmpty ? "добавьте подписку" : "подписка пуста · обновите"
+        }
         if let server = store.selectedServer {
             return "готово · \(server.title)"
         }
@@ -206,9 +220,12 @@ struct MainView: View {
                 MonoActionButton(title: "Конфиг", icon: "doc.on.doc", palette: p) {
                     store.copyConfig()
                 }
+                MonoActionButton(title: "Ссылка", icon: "link", palette: p) {
+                    store.copyShareLink()
+                }
             }
 
-            Text("Пинг — реальный TCP-хендшейк до узла. Подписка и выбор сервера хранятся на устройстве.")
+            Text("Пинг — реальный TCP-хендшейк до узла. Туннель поднимает установленный VPN-клиент: приложение готовит подписку и конфиг.")
                 .font(.system(size: 9.5))
                 .foregroundColor(p.dim2)
                 .lineSpacing(2)
@@ -218,14 +235,20 @@ struct MainView: View {
     }
 
     private var primaryTitle: String {
-        if store.servers.isEmpty { return "Добавить подписку" }
+        if store.servers.isEmpty {
+            return store.subscriptions.isEmpty ? "Добавить подписку" : "Обновить подписку"
+        }
         if store.selectedServer == nil { return "Выбрать сервер" }
         return "Открыть в VPN-клиенте"
     }
 
     private func primaryAction() {
         if store.servers.isEmpty {
-            sheet = .add
+            if store.subscriptions.isEmpty {
+                sheet = .add
+            } else {
+                Task { await store.refreshStale(force: true) }
+            }
         } else if store.selectedServer == nil {
             sheet = .servers
         } else {
@@ -235,11 +258,11 @@ struct MainView: View {
 
     private func footer(_ p: Palette) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("XOLIRX VPN 2.1 · iOS")
+            Text("XOLIRX VPN 2.1.1 · iOS")
                 .font(.system(size: 9.5))
                 .tracking(1.1)
                 .foregroundColor(p.dim2)
-            Text("VPN-туннель поднимается в установленном клиенте (sing-box, Streisand, Shadowrocket). Приложение готовит подписку и конфиг.")
+            Text("VPN-туннель поднимается в установленном клиенте (sing-box, Streisand, Shadowrocket). Приложение готовит подписку и конфиг. Узлы XHTTP понимает только Shadowrocket.")
                 .font(.system(size: 9.5))
                 .foregroundColor(p.dim2)
                 .lineSpacing(2)

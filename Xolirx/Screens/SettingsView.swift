@@ -192,7 +192,7 @@ struct SettingsView: View {
                 Text("XOLIRX VPN")
                     .font(.system(size: 21, weight: .regular, design: .serif))
                     .foregroundColor(p.text)
-                Text("Версия 2.1.0 · iOS")
+                Text("Версия 2.1.1 · iOS")
                     .font(.system(size: 10))
                     .tracking(0.8)
                     .foregroundColor(p.dim)
@@ -293,7 +293,7 @@ struct SettingsView: View {
                 SectionLabel(text: "Связь", palette: p)
                 kv("Telegram", "@xolirx", p)
                 Divider().overlay(p.line)
-                kv("Проект", "XOLIRX VPN 2.1", p)
+                kv("Проект", "XOLIRX VPN 2.1.1", p)
                 Divider().overlay(p.line)
                 kv("Платформа", "iPhone · iOS 16+", p)
             }

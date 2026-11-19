@@ -37,7 +37,9 @@ enum ConfigBuilder {
 
     // MARK: - vless
 
-    private static func vless(_ p: LinkParts) -> [String: Any] {
+    private static func vless(_ p: LinkParts) -> [String: Any]? {
+        // XHTTP — транспорт Xray; sing-box его не умеет, не выдаём битый конфиг.
+        if (p.query["type"] ?? "tcp") == "xhttp" { return nil }
         var o: [String: Any] = [
             "type": "vless",
             "tag": "proxy",
@@ -106,7 +108,11 @@ enum ConfigBuilder {
         ]
         var tls: [String: Any] = ["enabled": true]
         tls["server_name"] = p.query["sni"] ?? p.query["peer"] ?? p.host
-        if p.query["insecure"] == "1" { tls["insecure"] = true }
+        // pinSHA256 sing-box-клиент не проверяет: как и в десктопной версии,
+        // откатываемся на TLS без пининга, иначе узел просто не подключится.
+        if p.query["insecure"] == "1" || p.query["pinSHA256"] != nil {
+            tls["insecure"] = true
+        }
         o["tls"] = tls
         if let obfs = p.query["obfs"], !obfs.isEmpty {
             o["obfs"] = ["type": obfs, "password": p.query["obfs-password"] ?? ""]
@@ -196,7 +202,7 @@ enum ConfigBuilder {
             return ["type": "ws", "path": p.query["path"] ?? "/", "headers": ["Host": p.query["host"] ?? p.host]]
         case "grpc":
             return ["type": "grpc", "service_name": p.query["serviceName"] ?? ""]
-        case "http", "h2", "xhttp":
+        case "http", "h2":
             return ["type": "http", "host": [p.query["host"] ?? p.host], "path": p.query["path"] ?? "/"]
         default:
             return nil
