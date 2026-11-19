@@ -1,0 +1,48 @@
+name: build-ipa
+
+# Собирает неподписанный IPA на macOS-раннере GitHub.
+# Артефакт: XOLIRX-unsigned.ipa — подписывается на iPhone через
+# Sideloadly / AltStore своим Apple ID.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned app
+        run: |
+          xcodebuild \
+            -project Xolirx.xcodeproj \
+            -scheme Xolirx \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Pack IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/XOLIRX.app Payload/
+          zip -qry XOLIRX-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: XOLIRX-unsigned-ipa
+          path: XOLIRX-unsigned.ipa
