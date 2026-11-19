@@ -1,0 +1,70 @@
+import Foundation
+import NetworkExtension
+
+/// Скелет Packet Tunnel Provider для этапа 2.
+///
+/// Не входит в текущую сборку (расширение `.sample`), потому что требует
+/// платного Apple Developer аккаунта, entitlement NetworkExtension и
+/// встроенного ядра (libbox/sing-box). Места, где нужен реальный код ядра,
+/// помечены TODO — здесь нет выдуманного API.
+final class TunnelProvider: NEPacketTunnelProvider {
+
+    override func startTunnel(options: [String: NSObject]?,
+                             completionHandler: @escaping (Error?) -> Void) {
+        guard let config = loadSharedConfig() else {
+            completionHandler(TunnelError.configMissing)
+            return
+        }
+
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
+        settings.mtu = 1500
+
+        let ipv4 = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.0"])
+        ipv4.includedRoutes = [NEIPv4Route.default()]
+        settings.ipv4Settings = ipv4
+
+        let dns = NEDNSSettings(servers: ["1.1.1.1", "8.8.8.8"])
+        dns.matchDomains = [""]
+        settings.dnsSettings = dns
+
+        setTunnelNetworkSettings(settings) { error in
+            guard error == nil else {
+                completionHandler(error)
+                return
+            }
+            // TODO: поднять ядро с `config` через libbox:
+            //   let box = try BoxService(...)
+            //   try box.start(config)
+            // и остановить его в stopTunnel(). Пока ядро не подключено,
+            // туннель не пропускает трафик — это заглушка, а не рабочий VPN.
+            completionHandler(TunnelError.engineNotLinked)
+        }
+    }
+
+    override func stopTunnel(with reason: NEProviderStopReason,
+                             completionHandler: @escaping () -> Void) {
+        // TODO: остановить ядро и закрыть файловые дескрипторы.
+        completionHandler()
+    }
+
+    private func loadSharedConfig() -> String? {
+        guard let url = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.org.xolirx.vpn")?
+            .appendingPathComponent("config.json"),
+              let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return text
+    }
+}
+
+enum TunnelError: LocalizedError {
+    case configMissing
+    case engineNotLinked
+
+    var errorDescription: String? {
+        switch self {
+        case .configMissing: return "Конфиг не найден в общем контейнере"
+        case .engineNotLinked: return "Ядро туннеля не подключено (этап 2)"
+        }
+    }
+}

@@ -1,0 +1,41 @@
+# Фрагмент для ios/project.yml — этап 2 (не подключён).
+#
+# Добавлять только после получения платного Apple Developer аккаунта.
+# 1. Вставить блок `XolirxTunnel` в `targets:`.
+# 2. В target `Xolirx` добавить зависимости и entitlements:
+#      dependencies:
+#        - target: XolirxTunnel
+#          embed: true
+#      settings:
+#        base:
+#          CODE_SIGN_ENTITLEMENTS: Tunnel/Xolirx.entitlements
+# 3. Скопировать Tunnel/TunnelProvider.swift.sample в
+#    Tunnel/TunnelProvider.swift и подключить libbox.
+
+targets:
+  XolirxTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Tunnel
+        excludes:
+          - "*.sample"
+          - "*.entitlements"
+          - "*.yml"
+          - "README.md"
+    info:
+      path: Tunnel/Info.plist
+      properties:
+        CFBundleDisplayName: XOLIRX Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.network-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).TunnelProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.xolirx.vpn.tunnel
+        PRODUCT_NAME: XOLIRX Tunnel
+        INFOPLIST_FILE: Tunnel/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Tunnel/Tunnel.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        SKIP_INSTALL: YES
